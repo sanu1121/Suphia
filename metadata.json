@@ -1,0 +1,7 @@
+{
+  "name": "Sophia - Voice AI Companion",
+  "description": "Interactive voice-driven AI companion empowered with omniscient worldwide knowledge of the whole worlds, Earth civilizations, cosmic planetary systems, and global wonders.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
