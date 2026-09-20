@@ -391,6 +391,10 @@ export default function App() {
           mode: (data.mode as PersonalityMode) || currentMode,
           timestamp: data.timestamp || Date.now(),
           toolCalls: data.toolCalls,
+          thinkingEngine: data.thinkingEngine,
+          thinkingModel: data.thinkingModel,
+          relayActive: data.thinkingRelay,
+          voiceProvider: data.voiceEngine,
         };
 
         setMessages((prev) => [...prev, sophiaMsg]);

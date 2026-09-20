@@ -188,19 +188,47 @@ export const VoiceHUD: React.FC<VoiceHUDProps> = ({
           </button>
         </div>
 
-        {voiceStatus?.elevenLabsActive ? (
-          <span
-            className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20"
-            title="ElevenLabs Neural Voice Synthesis & Scribe Speech-to-Text Active"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            ElevenLabs {voiceSettings.fastVoiceMode ? 'Flash V2.5 (~75ms)' : 'Voice & STT'}
-          </span>
-        ) : (
-          <span className="text-[10px] text-white/40 font-mono">
-            Neural Voice Fallback
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {voiceStatus?.openAIActive ? (
+            <span
+              className="text-[10px] text-cyan-300 font-mono flex items-center gap-1 bg-cyan-500/15 px-2.5 py-0.5 rounded-full border border-cyan-500/30"
+              title="OpenAI GPT-4o Thinking Power & Reasoning Relay Active"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              OpenAI {voiceStatus?.openAIModel || 'GPT-4o'} (Thinking)
+            </span>
+          ) : (
+            <span
+              className="text-[10px] text-blue-300/70 font-mono flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20"
+              title="Gemini Flash Thinking Engine Active"
+            >
+              Gemini Flash (Thinking)
+            </span>
+          )}
+
+          {voiceStatus?.elevenLabsActive ? (
+            <span
+              className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20"
+              title="ElevenLabs Neural Voice Synthesis & Scribe Speech-to-Text Active"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              ElevenLabs {voiceSettings.fastVoiceMode ? 'Flash V2.5 (~75ms)' : 'Voice & STT'}
+            </span>
+          ) : (
+            <span className="text-[10px] text-white/40 font-mono">
+              Neural Voice Fallback
+            </span>
+          )}
+
+          {voiceStatus?.relayActive && (
+            <span
+              className="text-[10px] text-purple-300 font-mono flex items-center gap-1 bg-purple-500/15 px-2 py-0.5 rounded-full border border-purple-500/30 font-semibold"
+              title="Relay: OpenAI Reasoning Engine relayed directly with ElevenLabs Voice Synthesis"
+            >
+              ⚡ Relay Active
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Live Voice Recognition Transcript Banner */}

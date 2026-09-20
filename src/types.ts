@@ -36,6 +36,10 @@ export interface ChatMessage {
   toolCalls?: ToolExecutionRecord[];
   audioBase64?: string;
   isStreaming?: boolean;
+  thinkingEngine?: 'openai' | 'gemini';
+  thinkingModel?: string;
+  relayActive?: boolean;
+  voiceProvider?: string;
 }
 
 export interface TaskItem {
@@ -108,6 +112,7 @@ export interface VoiceSettings {
   hindiSound?: boolean;
   fastVoiceMode?: boolean; // Ultra-fast speech recognition & instant reply (850ms VAD)
   silenceDetectionMs?: number; // Configurable pause detection window (default: 850ms)
+  thinkingEngine?: 'auto' | 'openai' | 'gemini';
 }
 
 export interface LearnedInsight {
@@ -122,6 +127,10 @@ export interface LearnedInsight {
 export interface VoiceStatus {
   elevenLabsActive: boolean;
   elevenLabsSTTActive?: boolean;
+  openAIActive?: boolean;
+  openAIModel?: string;
+  thinkingEngine?: 'openai' | 'gemini';
+  relayActive?: boolean;
   provider: string;
   sttProvider?: string;
   defaultVoices?: Record<string, any>;

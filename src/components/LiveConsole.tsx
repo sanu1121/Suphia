@@ -238,13 +238,29 @@ export const LiveConsole: React.FC<LiveConsoleProps> = ({
 
               <div className={`max-w-[88%] sm:max-w-[78%] flex flex-col ${isSophia ? 'items-start' : 'items-end'}`}>
                 {/* Speaker Label */}
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1 flex items-center gap-2">
-                  <span style={{ color: isSophia ? msgPersonality.themeColor : undefined }}>
-                    {isSophia ? `Sophia • ${msgPersonality.name}` : 'You'}
-                  </span>
-                  <span className="text-[10px] text-white/30 font-mono font-light">
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span style={{ color: isSophia ? msgPersonality.themeColor : undefined }}>
+                      {isSophia ? `Sophia • ${msgPersonality.name}` : 'You'}
+                    </span>
+                    <span className="text-[10px] text-white/30 font-mono font-light">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  {isSophia && (msg.thinkingEngine || msg.relayActive) && (
+                    <div className="flex items-center gap-1.5 font-mono text-[9px]">
+                      {msg.relayActive ? (
+                        <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-purple-400 animate-pulse" />
+                          OPENAI ➔ ELEVENLABS RELAY
+                        </span>
+                      ) : msg.thinkingEngine === 'openai' ? (
+                        <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                          {msg.thinkingModel || 'GPT-4O'} THINKING
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
 
                 {/* Message Bubble */}

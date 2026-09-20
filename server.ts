@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import os from "os";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
+import OpenAI from "openai";
 import { WORLD_KNOWLEDGE_NODES } from "./src/data/worldKnowledge";
 
 dotenv.config();
@@ -100,6 +101,19 @@ function getGenAI(): GoogleGenAI {
     });
   }
   return genAIClient;
+}
+
+// Lazy initialization for OpenAI client (Thinking Power & Reasoning Relay)
+let openAIClient: OpenAI | null = null;
+function getOpenAI(): OpenAI | null {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    return null;
+  }
+  if (!openAIClient) {
+    openAIClient = new OpenAI({ apiKey });
+  }
+  return openAIClient;
 }
 
 // Resilient Model Calling with Multi-Model Fallback and Demand Spike Resilience
@@ -954,6 +968,300 @@ app.post("/api/tasks", (req, res) => {
   res.json({ success: true, tasks: serverState.tasks });
 });
 
+// OpenAI Tools Definition for Thinking & Reasoning Relay
+const openAITools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "exploreWorldKnowledge",
+      description: "Explore world knowledge across earth wonders, cosmic landmarks, ancient civilizations, and ocean frontiers.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Target country, landmark, planet, deep trench, or civilization" },
+          realm: {
+            type: "string",
+            enum: ["earth_wonders", "cosmic_planets", "civilizations", "deep_frontiers", "general_world"],
+            description: "World realm category",
+          },
+          aspect: {
+            type: "string",
+            description: "Aspect of interest: history, mysteries, geography, facts",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "webSearch",
+      description: "Search the live web for breaking real-time news, current events, or live information.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "manageTasks",
+      description: "Manage tasks and action checklist for the user.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["add", "list", "complete", "delete"] },
+          taskText: { type: "string", description: "Task description when adding" },
+          taskId: { type: "string", description: "Task ID when completing or deleting" },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getSystemDiagnostics",
+      description: "Retrieve real-time hardware, CPU, memory, and telemetry metrics of Sophia's neural core.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "switchPersonalityMode",
+      description: "Switch Sophia's conversational personality mode.",
+      parameters: {
+        type: "object",
+        properties: {
+          mode: { type: "string", enum: ["girlfriend", "assistant", "friend", "mentor", "waifu"] },
+        },
+        required: ["mode"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "setReminder",
+      description: "Schedule a reminder notification for the user.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Reminder description or event" },
+          timeStr: { type: "string", description: "Target time (e.g. 5:00 PM)" },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "changeVoice",
+      description: "Switch Sophia's active spoken voice profile.",
+      parameters: {
+        type: "object",
+        properties: {
+          voiceName: { type: "string", description: "Name of the voice profile (e.g. Rachel, Domi, Dorothy, Elli, Bella)" },
+          voiceId: { type: "string", description: "Optional custom ElevenLabs Voice ID" },
+        },
+        required: ["voiceName"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "setHindiSoundMode",
+      description: "Toggle Hindi Voice and Spoken Reply delivery mode.",
+      parameters: {
+        type: "object",
+        properties: {
+          enabled: { type: "boolean", description: "Whether to activate Hindi voice delivery" },
+        },
+        required: ["enabled"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "learnUserInsight",
+      description: "Fast-learn a user preference, name, habit, or trait into long-term neural memory.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short title of the learned memory" },
+          detail: { type: "string", description: "Specific detail or preference learned" },
+          category: { type: "string", enum: ["identity", "preference", "interest", "habit", "language", "style"] },
+        },
+        required: ["title", "detail"],
+      },
+    },
+  },
+];
+
+// OpenAI Thinking Power & Relay Execution Engine
+async function callOpenAIThinkingRelay(params: {
+  message: string;
+  mode: string;
+  history: any[];
+  isHindiModeActive: boolean;
+  systemInstruction: string;
+}) {
+  const openai = getOpenAI();
+  if (!openai) {
+    throw new Error("OpenAI API key is not configured");
+  }
+
+  const modelCandidates = ["gpt-4o", "gpt-4o-mini"];
+  let chosenModel = "gpt-4o";
+
+  const openAIMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: params.systemInstruction },
+  ];
+
+  if (Array.isArray(params.history)) {
+    for (const h of params.history.slice(-6)) {
+      if (h.role === "user") {
+        openAIMessages.push({ role: "user", content: h.content });
+      } else if (h.role === "assistant") {
+        openAIMessages.push({ role: "assistant", content: h.spokenText || h.content });
+      }
+    }
+  }
+
+  openAIMessages.push({ role: "user", content: params.message });
+
+  let completion: OpenAI.Chat.Completions.ChatCompletion | null = null;
+  let lastErr: any = null;
+
+  for (const model of modelCandidates) {
+    try {
+      completion = await openai.chat.completions.create({
+        model,
+        messages: openAIMessages,
+        tools: openAITools,
+        temperature: 0.75,
+      });
+      chosenModel = model;
+      break;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`OpenAI model ${model} attempt failed:`, err?.message || err);
+    }
+  }
+
+  if (!completion || !completion.choices?.[0]) {
+    throw lastErr || new Error("OpenAI failed to return completion");
+  }
+
+  const firstChoice = completion.choices[0];
+  const executedTools: any[] = [];
+  let switchedMode: string | null = null;
+  let switchedVoice: any = null;
+  let switchedHindiSound: boolean | null = null;
+  let toolLearnedInsight: any = null;
+  let finalSpokenText = "";
+
+  if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
+    const toolCallMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      firstChoice.message,
+    ];
+
+    for (const toolCall of firstChoice.message.tool_calls) {
+      if (toolCall.type !== "function") continue;
+      const toolName = toolCall.function.name;
+      let parsedArgs: any = {};
+      try {
+        parsedArgs = JSON.parse(toolCall.function.arguments || "{}");
+      } catch {
+        parsedArgs = {};
+      }
+
+      const toolResult = await executeTool(toolName, parsedArgs, params.mode);
+
+      if (toolName === "switchPersonalityMode" && toolResult.success && toolResult.newMode) {
+        switchedMode = toolResult.newMode;
+      }
+      if ((toolName === "changeVoice" || toolName === "setHindiSoundMode") && toolResult.success && toolResult.switchedVoice) {
+        switchedVoice = toolResult.switchedVoice;
+      }
+      if (toolResult.hindiSound !== undefined) {
+        switchedHindiSound = Boolean(toolResult.hindiSound);
+      }
+      if (toolName === "learnUserInsight" && toolResult.success && toolResult.insight) {
+        toolLearnedInsight = toolResult.insight;
+      }
+
+      let summaryDesc = `Executed ${toolName}`;
+      if (toolName === "exploreWorldKnowledge") summaryDesc = `World Knowledge: "${parsedArgs?.query || "World"}" explored`;
+      if (toolName === "manageTasks") summaryDesc = `Task: ${parsedArgs?.action || "action"} completed`;
+      if (toolName === "webSearch") summaryDesc = `Web search for "${parsedArgs?.query}"`;
+      if (toolName === "getSystemDiagnostics") summaryDesc = "Telemetry diagnostics scan completed";
+      if (toolName === "switchPersonalityMode") summaryDesc = `Mode switched to ${parsedArgs?.mode}`;
+      if (toolName === "setReminder") summaryDesc = `Reminder set: ${parsedArgs?.title}`;
+      if (toolName === "setHindiSoundMode") summaryDesc = toolResult.summary || "Hindi sound mode toggled";
+      if (toolName === "changeVoice") summaryDesc = toolResult.summary || `Voice switched to ${toolResult.switchedVoice?.name}`;
+      if (toolName === "learnUserInsight") summaryDesc = toolResult.summary || `Fast Learner memorized "${toolResult.insight?.title}"`;
+
+      executedTools.push({
+        id: `tool-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        toolName,
+        displayName: toolName,
+        args: parsedArgs,
+        result: toolResult,
+        timestamp: Date.now(),
+        summary: summaryDesc,
+      });
+
+      toolCallMessages.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(toolResult),
+      });
+    }
+
+    try {
+      const secondCompletion = await openai.chat.completions.create({
+        model: chosenModel,
+        messages: [...openAIMessages, ...toolCallMessages],
+        temperature: 0.7,
+      });
+
+      finalSpokenText = sanitizeForSpeech(secondCompletion.choices[0]?.message?.content || "Understood!");
+    } catch (followUpErr: any) {
+      console.warn("OpenAI second-turn tool completion error:", followUpErr?.message || followUpErr);
+      finalSpokenText = executedTools.map((t) => t.summary).join(". ") || "Done!";
+    }
+  } else {
+    finalSpokenText = sanitizeForSpeech(
+      firstChoice.message.content || (params.isHindiModeActive ? "हाँजी, मैं सुन रही हूँ!" : "Yes, I am listening!")
+    );
+  }
+
+  return {
+    content: finalSpokenText,
+    spokenText: finalSpokenText,
+    switchedMode,
+    switchedVoice,
+    switchedHindiSound,
+    executedTools,
+    toolLearnedInsight,
+    thinkingModel: chosenModel,
+  };
+}
+
 // Gemini Chat & Tool Calling Route
 app.post("/api/chat", async (req, res) => {
   let autoLearnedInsight: ServerLearnedInsight | null = null;
@@ -966,11 +1274,54 @@ app.post("/api/chat", async (req, res) => {
     // Fast Heuristic Learning: instantly extract user facts and preferences
     autoLearnedInsight = detectAndLearnUserInsights(message);
 
-    const ai = getGenAI();
     const hasDevanagari = /[\u0900-\u097F]/.test(message);
     const hindiIntent = /(hindi|हिंदी|speak in hindi|talk in hindi|reply in hindi|hindi voice|hindi sound|hindi mein|namaste|kaise ho|kaisi ho|kya haal|kya kar rahi ho|batao|sunao|tum kaun ho|shukriya|dhanyawad|aap kaise|bolo|give to hindi voice|recognise and reply in hindi)/i.test(message);
     const isHindiModeActive = Boolean(hindiSound) || hasDevanagari || hindiIntent;
     const systemInstruction = buildSystemInstruction(mode, "User", isHindiModeActive);
+
+    const openAIKey = process.env.OPENAI_API_KEY?.trim();
+    const hasElevenLabs = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY.trim().length > 0);
+
+    // 1. PRIMARY THINKING POWER & REASONING RELAY: OPENAI
+    if (openAIKey) {
+      try {
+        const relayResult = await callOpenAIThinkingRelay({
+          message,
+          mode,
+          history,
+          isHindiModeActive,
+          systemInstruction,
+        });
+
+        let effectiveSwitchedHindi = relayResult.switchedHindiSound;
+        if (hindiIntent && effectiveSwitchedHindi === null && !hindiSound) {
+          effectiveSwitchedHindi = true;
+        }
+
+        return res.json({
+          content: relayResult.content,
+          spokenText: relayResult.spokenText,
+          mode: relayResult.switchedMode || mode,
+          switchedMode: relayResult.switchedMode,
+          switchedVoice: relayResult.switchedVoice,
+          switchedHindiSound: effectiveSwitchedHindi,
+          toolCalls: relayResult.executedTools,
+          timestamp: Date.now(),
+          tasks: serverState.tasks,
+          reminders: serverState.reminders,
+          learnedInsights: serverState.learnedInsights,
+          newLearnedInsight: autoLearnedInsight || relayResult.toolLearnedInsight,
+          thinkingEngine: "openai",
+          thinkingModel: relayResult.thinkingModel,
+          thinkingRelay: true,
+          voiceEngine: hasElevenLabs ? "elevenlabs" : "gemini",
+        });
+      } catch (openAIErr: any) {
+        console.warn("OpenAI thinking relay encountered an issue, falling back to Gemini:", openAIErr?.message || openAIErr);
+      }
+    }
+
+    const ai = getGenAI();
 
     // Format tools
     const tools = [
@@ -1120,6 +1471,10 @@ app.post("/api/chat", async (req, res) => {
       reminders: serverState.reminders,
       learnedInsights: serverState.learnedInsights,
       newLearnedInsight: autoLearnedInsight || toolLearnedInsight,
+      thinkingEngine: "gemini",
+      thinkingModel: "gemini-flash",
+      thinkingRelay: false,
+      voiceEngine: hasElevenLabs ? "elevenlabs" : "gemini",
     });
   } catch (error: any) {
     console.error("Chat error in Sophia server:", error);
@@ -1160,6 +1515,9 @@ app.post("/api/chat", async (req, res) => {
       learnedInsights: serverState.learnedInsights,
       newLearnedInsight: typeof autoLearnedInsight !== "undefined" ? autoLearnedInsight : null,
       warning: "Model temporarily unavailable - persona fallback engaged",
+      thinkingEngine: "gemini",
+      thinkingRelay: false,
+      voiceEngine: process.env.ELEVENLABS_API_KEY ? "elevenlabs" : "gemini",
     });
   }
 });
@@ -1167,9 +1525,14 @@ app.post("/api/chat", async (req, res) => {
 // Voice Status & Provider Config Endpoint
 app.get("/api/voice-status", (req, res) => {
   const hasElevenLabs = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY.trim().length > 0);
+  const hasOpenAI = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0);
   res.json({
     elevenLabsActive: hasElevenLabs,
     elevenLabsSTTActive: hasElevenLabs,
+    openAIActive: hasOpenAI,
+    openAIModel: "gpt-4o",
+    thinkingEngine: hasOpenAI ? "openai" : "gemini",
+    relayActive: hasOpenAI && hasElevenLabs,
     provider: hasElevenLabs ? "elevenlabs" : "gemini",
     sttProvider: hasElevenLabs ? "elevenlabs" : "gemini",
     defaultVoices: {
