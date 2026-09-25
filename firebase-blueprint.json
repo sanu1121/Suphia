@@ -1,0 +1,206 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with personalized Sophia preferences and voice configuration",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique identifier of the user matching request.auth.uid",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user",
+          "maxLength": 150
+        },
+        "preferredMode": {
+          "type": "string",
+          "description": "Current persona mode for Sophia",
+          "enum": ["girlfriend", "assistant", "friend", "mentor", "waifu"]
+        },
+        "preferredLanguage": {
+          "type": "string",
+          "description": "Primary communication language preference",
+          "maxLength": 50
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Server timestamp of document creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Server timestamp of last update"
+        }
+      },
+      "required": ["userId", "displayName", "preferredMode", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A conversation turn exchanged between user and Sophia",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique message ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "User UID who owns this chat turn",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "description": "Speaker identity",
+          "enum": ["user", "sophia"]
+        },
+        "content": {
+          "type": "string",
+          "description": "Full formatted text of the message",
+          "maxLength": 8000
+        },
+        "spokenText": {
+          "type": "string",
+          "description": "Clean spoken speech transcript",
+          "maxLength": 8000
+        },
+        "sentiment": {
+          "type": "string",
+          "description": "Detected emotional sentiment of the speech",
+          "enum": ["happy", "calm", "loving", "thoughtful", "empathetic", "energetic"]
+        },
+        "voiceEngine": {
+          "type": "string",
+          "description": "Synthesis engine used for playback",
+          "maxLength": 50
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Client timestamp string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Server timestamp of message record"
+        }
+      },
+      "required": ["id", "userId", "role", "content", "sentiment", "createdAt"]
+    },
+    "LearnedInsight": {
+      "title": "LearnedInsight",
+      "description": "Adaptive memory item autonomously acquired by Sophia",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique insight ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "User UID for whom this insight was learned",
+          "maxLength": 128
+        },
+        "category": {
+          "type": "string",
+          "description": "Category domain of the learned fact",
+          "maxLength": 100
+        },
+        "fact": {
+          "type": "string",
+          "description": "Learned personalized fact or preference",
+          "maxLength": 2000
+        },
+        "confidence": {
+          "type": "number",
+          "description": "Confidence score between 0 and 1"
+        },
+        "learnedAt": {
+          "type": "string",
+          "description": "Formatted timestamp string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Server timestamp of persistence"
+        }
+      },
+      "required": ["id", "userId", "category", "fact", "confidence", "createdAt"]
+    },
+    "Creation": {
+      "title": "Creation",
+      "description": "Multimodal creation saved in AI Studio",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique creation ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "description": "Modality type",
+          "enum": ["music", "image", "video", "transcription", "grounding"]
+        },
+        "title": {
+          "type": "string",
+          "description": "Display title for the creation",
+          "maxLength": 200
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Generation prompt or query",
+          "maxLength": 4000
+        },
+        "mediaUrl": {
+          "type": "string",
+          "description": "Media URI or data representation",
+          "maxLength": 100000
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Server timestamp of record"
+        }
+      },
+      "required": ["id", "userId", "type", "title", "prompt", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Root user profile containing preferences, persona setting, and account status"
+    },
+    "/users/{userId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/ChatMessage"
+      },
+      "description": "Persistent conversation chat history with sentiment tracking"
+    },
+    "/users/{userId}/insights/{insightId}": {
+      "schema": {
+        "$ref": "#/entities/LearnedInsight"
+      },
+      "description": "Fast Learner adaptive long-term memories"
+    },
+    "/users/{userId}/creations/{creationId}": {
+      "schema": {
+        "$ref": "#/entities/Creation"
+      },
+      "description": "Multimodal studio creations history (Lyria music, Imagen art, Veo videos)"
+    }
+  }
+}

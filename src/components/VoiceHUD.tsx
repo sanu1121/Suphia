@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PersonalityMode, VoiceSettings, VoiceStatus } from '../types';
 import { PERSONALITIES } from '../data/personalities';
+import { SpeechSentiment, SENTIMENT_CONFIGS, SentimentVisualConfig } from '../utils/sentiment';
 import {
   Mic,
   MicOff,
@@ -14,6 +15,15 @@ import {
   Zap,
   Brain,
   Clock,
+  Sun,
+  Smile,
+  Heart,
+  Compass,
+  Palette,
+  Check,
+  Pause,
+  Play,
+  Hand,
 } from 'lucide-react';
 
 interface VoiceHUDProps {
@@ -34,6 +44,12 @@ interface VoiceHUDProps {
   onOpenFastLearner?: () => void;
   learnedInsightsCount?: number;
   liveTranscript?: string;
+  currentSentiment?: SpeechSentiment;
+  onSelectSentiment?: (sentiment: SpeechSentiment) => void;
+  isSophiaPaused?: boolean;
+  onTogglePauseResume?: () => void;
+  onOpenGestureHUD?: () => void;
+  isGestureEnabled?: boolean;
 }
 
 export const VoiceHUD: React.FC<VoiceHUDProps> = ({
@@ -54,11 +70,20 @@ export const VoiceHUD: React.FC<VoiceHUDProps> = ({
   onOpenFastLearner,
   learnedInsightsCount,
   liveTranscript,
+  currentSentiment = 'calm',
+  onSelectSentiment,
+  isSophiaPaused = false,
+  onTogglePauseResume,
+  onOpenGestureHUD,
+  isGestureEnabled = false,
 }) => {
   const [inputText, setInputText] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showSentimentPicker, setShowSentimentPicker] = useState(false);
   const personality = PERSONALITIES[mode] || PERSONALITIES.girlfriend;
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const sentimentConfig = SENTIMENT_CONFIGS[currentSentiment] || SENTIMENT_CONFIGS.calm;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,18 +92,155 @@ export const VoiceHUD: React.FC<VoiceHUDProps> = ({
     setInputText('');
   };
 
+  const getSentimentIcon = (sentiment: SpeechSentiment | string) => {
+    switch (sentiment) {
+      case 'happy':
+        return <Sun className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />;
+      case 'calm':
+        return <Compass className="w-3.5 h-3.5 text-sky-400" />;
+      case 'loving':
+        return <Heart className="w-3.5 h-3.5 text-pink-400 animate-pulse" />;
+      case 'thoughtful':
+        return <Brain className="w-3.5 h-3.5 text-purple-400" />;
+      case 'empathetic':
+        return <Sparkles className="w-3.5 h-3.5 text-emerald-400" />;
+      case 'energetic':
+        return <Zap className="w-3.5 h-3.5 text-orange-400 animate-bounce" />;
+    }
+  };
+
   return (
     <div
       id="sophia-voice-hud"
-      className="w-full bg-white/[0.03] border border-white/[0.08] backdrop-blur-2xl rounded-2xl p-3 sm:p-4 shadow-2xl relative transition-all duration-300"
+      className="w-full bg-white/[0.03] backdrop-blur-2xl rounded-2xl p-3 sm:p-4 shadow-2xl relative transition-all duration-500 border"
       style={{
-        boxShadow: `0 12px 40px -10px ${personality.glowColor}`,
+        borderColor: isSpeaking ? sentimentConfig.borderTint : 'rgba(255, 255, 255, 0.08)',
+        boxShadow: isSpeaking
+          ? `0 16px 50px -6px ${sentimentConfig.glowColor}, 0 0 25px ${sentimentConfig.glowColor}`
+          : `0 12px 40px -10px ${personality.glowColor}`,
       }}
     >
+      {/* Dynamic Visual Sentiment Indicator Bar */}
+      <div
+        id="hud-sentiment-indicator"
+        className={`mb-3 px-3 py-2 rounded-xl transition-all duration-500 border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+          isSpeaking
+            ? 'scale-[1.01] shadow-lg animate-pulse'
+            : 'bg-white/[0.02] border-white/[0.06]'
+        }`}
+        style={{
+          backgroundColor: isSpeaking ? sentimentConfig.bgTint : undefined,
+          borderColor: isSpeaking ? sentimentConfig.borderTint : undefined,
+        }}
+      >
+        <div className="flex items-center gap-2.5">
+          {/* Glowing Sentiment Pulsing Dot & Icon */}
+          <div className="relative flex items-center justify-center">
+            <span
+              className={`absolute w-5 h-5 rounded-full opacity-60 ${
+                isSpeaking ? 'animate-ping' : ''
+              }`}
+              style={{ backgroundColor: sentimentConfig.primaryColor }}
+            />
+            <div
+              className="relative p-1.5 rounded-lg border flex items-center justify-center shadow-inner"
+              style={{
+                backgroundColor: isSpeaking ? `${sentimentConfig.primaryColor}22` : 'rgba(255, 255, 255, 0.04)',
+                borderColor: sentimentConfig.borderTint,
+              }}
+            >
+              {getSentimentIcon(currentSentiment)}
+            </div>
+          </div>
+
+          <div className="flex flex-col text-left">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-white/50">
+                {isSpeaking ? "Sophia's Active Vocal Sentiment:" : "Speech Sentiment Tone:"}
+              </span>
+              <span
+                className="text-xs font-bold transition-colors duration-300 flex items-center gap-1.5"
+                style={{ color: sentimentConfig.primaryColor }}
+              >
+                <span>{sentimentConfig.name}</span>
+                <span className="text-[10px] font-normal opacity-80">({sentimentConfig.nameHindi})</span>
+              </span>
+            </div>
+            <p className="text-[11px] text-white/60 leading-tight">
+              {isSpeaking
+                ? (voiceSettings.hindiSound ? sentimentConfig.descriptionHindi : sentimentConfig.description)
+                : 'Dynamic emotional feedback shifts colors subtly in real-time as Sophia speaks.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Sentiment Audition / Override Selector */}
+        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+          <button
+            type="button"
+            id="btn-toggle-sentiment-picker"
+            onClick={() => setShowSentimentPicker(!showSentimentPicker)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition cursor-pointer"
+            style={{
+              borderColor: sentimentConfig.borderTint,
+              color: sentimentConfig.primaryColor,
+              backgroundColor: `${sentimentConfig.primaryColor}15`,
+            }}
+            title="Audition or switch voice speech sentiment colors"
+          >
+            <Palette className="w-3 h-3" />
+            <span>Audition Sentiments</span>
+            <span className="text-[9px] opacity-70">▾</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive Sentiment Palette Audition Row (when opened) */}
+      {showSentimentPicker && (
+        <div
+          id="sentiment-palette-drawer"
+          className="mb-3 p-2.5 rounded-xl bg-black/60 border border-white/10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 animate-fadeIn"
+        >
+          {(Object.keys(SENTIMENT_CONFIGS) as SpeechSentiment[]).map((sentKey) => {
+            const cfg = SENTIMENT_CONFIGS[sentKey];
+            const isSelected = currentSentiment === sentKey;
+            return (
+              <button
+                key={sentKey}
+                type="button"
+                onClick={() => {
+                  onSelectSentiment?.(sentKey);
+                }}
+                className={`p-2 rounded-lg text-left border transition-all flex flex-col justify-between gap-1 cursor-pointer group ${
+                  isSelected
+                    ? 'ring-2 shadow-md'
+                    : 'bg-white/[0.02] border-white/[0.08] hover:bg-white/[0.06]'
+                }`}
+                style={{
+                  borderColor: isSelected ? cfg.primaryColor : undefined,
+                  boxShadow: isSelected ? `0 0 14px ${cfg.glowColor}` : undefined,
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                      style={{ backgroundColor: cfg.primaryColor }}
+                    />
+                    <span className="text-[11px] font-semibold text-white truncate">{cfg.name.split(' ')[0]}</span>
+                  </div>
+                  {isSelected && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span className="text-[9px] text-white/50 truncate group-hover:text-white/80">{cfg.name.split('(')[1]?.replace(')', '') || ''}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Audio Wave Visualizer Line when Speaking/Listening */}
       <div className="flex items-center justify-center gap-1.5 h-6 mb-2.5">
         {Array.from({ length: 20 }).map((_, i) => {
-          const isCenter = Math.abs(i - 10) < 5;
           const dynamicHeight = isSpeaking
             ? Math.max(4, Math.sin((i + Date.now() / 100) * 0.8) * 18 + 10)
             : isListening
@@ -92,10 +254,11 @@ export const VoiceHUD: React.FC<VoiceHUDProps> = ({
               style={{
                 height: `${dynamicHeight}px`,
                 backgroundColor: isSpeaking
-                  ? personality.themeColor
+                  ? sentimentConfig.primaryColor
                   : isListening
                   ? '#10b981'
                   : 'rgba(255, 255, 255, 0.12)',
+                boxShadow: isSpeaking ? `0 0 8px ${sentimentConfig.glowColor}` : undefined,
               }}
             />
           );
@@ -282,6 +445,40 @@ export const VoiceHUD: React.FC<VoiceHUDProps> = ({
         </div>
       )}
 
+      {/* Sophia Paused Banner */}
+      {isSophiaPaused && (
+        <div
+          id="hud-sophia-paused-alert"
+          className="flex items-center justify-between gap-3 px-3.5 py-2.5 mb-2.5 rounded-xl bg-gradient-to-r from-amber-950/70 via-amber-900/50 to-orange-950/70 border border-amber-500/50 text-amber-200 text-xs shadow-lg shadow-amber-950/50 animate-pulse"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/30 border border-amber-400/50 flex items-center justify-center text-amber-300">
+              <Pause className="w-4 h-4 fill-current" />
+            </div>
+            <div>
+              <span className="font-bold text-white block tracking-wide">
+                Sophia is currently Paused
+              </span>
+              <span className="text-[11px] text-amber-300/80 flex items-center gap-1.5">
+                <Hand className="w-3 h-3 text-amber-400" />
+                <span>Wave hand in front of camera or click Resume</span>
+              </span>
+            </div>
+          </div>
+          {onTogglePauseResume && (
+            <button
+              type="button"
+              id="hud-btn-resume"
+              onClick={onTogglePauseResume}
+              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Resume</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Input & Control Bar */}
       <form onSubmit={handleSubmit} className="flex items-center gap-2.5">
         {/* Main Microphone Action Button */}
@@ -317,6 +514,61 @@ export const VoiceHUD: React.FC<VoiceHUDProps> = ({
             <Mic className="w-5 h-5" />
           )}
         </button>
+
+        {/* Hand Wave Gesture Interface Trigger */}
+        {onOpenGestureHUD && (
+          <button
+            type="button"
+            id="btn-hud-gesture"
+            onClick={onOpenGestureHUD}
+            className={`p-3 rounded-xl border transition-all cursor-pointer relative flex items-center justify-center ${
+              isGestureEnabled
+                ? isSophiaPaused
+                  ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+                  : 'bg-cyan-500/20 border-cyan-400/60 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                : 'bg-white/[0.04] border-white/10 text-white/40 hover:text-white hover:border-white/20'
+            }`}
+            title="Webcam Gesture Sensor: Wave hand to Pause / Resume"
+          >
+            <Hand
+              className={`w-5 h-5 ${
+                isGestureEnabled
+                  ? isSophiaPaused
+                    ? 'text-amber-400'
+                    : 'text-cyan-400 animate-pulse'
+                  : ''
+              }`}
+            />
+            {isGestureEnabled && (
+              <span
+                className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-black ${
+                  isSophiaPaused ? 'bg-amber-400 animate-ping' : 'bg-cyan-400 animate-ping'
+                }`}
+              />
+            )}
+          </button>
+        )}
+
+        {/* Manual Pause / Resume Button */}
+        {onTogglePauseResume && (
+          <button
+            type="button"
+            id="btn-hud-toggle-pause"
+            onClick={onTogglePauseResume}
+            className={`p-3 rounded-xl border transition-colors cursor-pointer flex items-center justify-center ${
+              isSophiaPaused
+                ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 hover:bg-amber-500/35'
+                : 'bg-white/[0.03] border-white/[0.08] text-white/40 hover:text-white hover:border-white/20'
+            }`}
+            title={isSophiaPaused ? 'Resume Sophia' : 'Pause Sophia (or wave hand)'}
+          >
+            {isSophiaPaused ? (
+              <Play className="w-5 h-5 fill-current text-amber-400" />
+            ) : (
+              <Pause className="w-5 h-5" />
+            )}
+          </button>
+        )}
 
         {/* Text Prompt Input for Keyboard / Voice Synthesis */}
         <div className="relative flex-1">

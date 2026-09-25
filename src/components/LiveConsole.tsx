@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { ChatMessage, PersonalityMode } from '../types';
 import { PERSONALITIES } from '../data/personalities';
+import { SENTIMENT_CONFIGS } from '../utils/sentiment';
 import {
   Volume2,
   Globe,
@@ -247,8 +248,25 @@ export const LiveConsole: React.FC<LiveConsoleProps> = ({
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  {isSophia && (msg.thinkingEngine || msg.relayActive) && (
-                    <div className="flex items-center gap-1.5 font-mono text-[9px]">
+                  {isSophia && (
+                    <div className="flex items-center gap-1.5 font-mono text-[9px] flex-wrap justify-end">
+                      {msg.sentiment && (
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[9px] font-medium border flex items-center gap-1"
+                          style={{
+                            color: SENTIMENT_CONFIGS[msg.sentiment]?.primaryColor || '#f59e0b',
+                            borderColor: SENTIMENT_CONFIGS[msg.sentiment]?.borderTint || 'rgba(245, 158, 11, 0.3)',
+                            backgroundColor: `${SENTIMENT_CONFIGS[msg.sentiment]?.primaryColor || '#f59e0b'}18`,
+                          }}
+                          title={`Sophia's Vocal Sentiment: ${SENTIMENT_CONFIGS[msg.sentiment]?.name || msg.sentiment}`}
+                        >
+                          <span
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: SENTIMENT_CONFIGS[msg.sentiment]?.primaryColor || '#f59e0b' }}
+                          />
+                          <span>{SENTIMENT_CONFIGS[msg.sentiment]?.name.split(' ')[0] || msg.sentiment}</span>
+                        </span>
+                      )}
                       {msg.relayActive ? (
                         <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
                           <span className="w-1 h-1 rounded-full bg-purple-400 animate-pulse" />

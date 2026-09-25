@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PersonalityMode } from '../types';
 import { PERSONALITIES } from '../data/personalities';
-import { Volume2, VolumeX, Trash2, Bell, Sparkles, Globe, Radio, AudioWaveform, Zap, Brain } from 'lucide-react';
+import { Volume2, VolumeX, Trash2, Bell, Sparkles, Globe, Radio, AudioWaveform, Zap, Brain, LogIn, LogOut, Database, UserCheck, Hand } from 'lucide-react';
 
 interface HeaderProps {
   currentMode: PersonalityMode;
@@ -18,6 +18,13 @@ interface HeaderProps {
   activeVoiceName?: string;
   onOpenFastLearner?: () => void;
   learnedInsightsCount?: number;
+  onOpenStudio?: () => void;
+  isSophiaPaused?: boolean;
+  onOpenGestureHUD?: () => void;
+  isGestureEnabled?: boolean;
+  currentUser?: { displayName?: string | null; email?: string | null; photoURL?: string | null; uid?: string } | null;
+  onLogin?: () => void;
+  onLogout?: () => void;
 }
 
 const MODES_LIST: PersonalityMode[] = ['assistant', 'girlfriend', 'friend', 'mentor', 'waifu'];
@@ -37,6 +44,13 @@ export const Header: React.FC<HeaderProps> = ({
   activeVoiceName,
   onOpenFastLearner,
   learnedInsightsCount = 0,
+  onOpenStudio,
+  isSophiaPaused = false,
+  onOpenGestureHUD,
+  isGestureEnabled = false,
+  currentUser,
+  onLogin,
+  onLogout,
 }) => {
   const personality = PERSONALITIES[currentMode] || PERSONALITIES.girlfriend;
   const [timeString, setTimeString] = useState('');
@@ -196,6 +210,117 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-white/20">•</span>
           <span className="text-white/50">SYSTEM ACTIVE</span>
         </div>
+
+        {/* AI Multimodal Studio Button */}
+        {onOpenStudio && (
+          <button
+            type="button"
+            id="header-btn-ai-studio"
+            onClick={onOpenStudio}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-pink-500/20 to-purple-500/20 hover:from-amber-500/30 hover:to-purple-500/30 border border-amber-500/40 text-white font-medium text-xs transition cursor-pointer shadow-sm group"
+            title="Open Multimodal AI Studio (Lyria Music, Nano Banana 2 Images, Veo 3 Video, Grounding)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-12 transition-transform" />
+            <span className="font-semibold text-amber-200 hidden sm:inline">AI Studio</span>
+          </button>
+        )}
+
+        {/* Futuristic Wave Gesture Control Button */}
+        {onOpenGestureHUD && (
+          <button
+            type="button"
+            id="header-btn-gesture-hud"
+            onClick={onOpenGestureHUD}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-sm group ${
+              isGestureEnabled
+                ? isSophiaPaused
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                  : 'bg-cyan-500/20 border-cyan-400/50 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                : 'bg-white/[0.04] border-white/10 text-white/60 hover:text-white hover:border-white/25'
+            }`}
+            title="Webcam Gesture Sensor: Wave hand to Pause / Resume Sophia"
+          >
+            <div className="relative flex items-center justify-center">
+              <Hand
+                className={`w-3.5 h-3.5 transition-transform group-hover:rotate-12 ${
+                  isGestureEnabled
+                    ? isSophiaPaused
+                      ? 'text-amber-400'
+                      : 'text-cyan-400 animate-pulse'
+                    : 'text-white/40'
+                }`}
+              />
+              {isGestureEnabled && (
+                <span
+                  className={`absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full ${
+                    isSophiaPaused ? 'bg-amber-400 animate-ping' : 'bg-cyan-400 animate-ping'
+                  }`}
+                />
+              )}
+            </div>
+            <span className="hidden md:inline">Gesture</span>
+            <span
+              className={`text-[9px] font-mono px-1 py-0.2 rounded uppercase ${
+                isGestureEnabled
+                  ? isSophiaPaused
+                    ? 'bg-amber-950 text-amber-300'
+                    : 'bg-cyan-950 text-cyan-300'
+                  : 'bg-white/10 text-white/40'
+              }`}
+            >
+              {isGestureEnabled ? (isSophiaPaused ? 'PAUSE' : 'ON') : 'OFF'}
+            </span>
+          </button>
+        )}
+
+        {/* Firebase Authentication & Cloud Sync */}
+        {currentUser ? (
+          <div className="flex items-center gap-1.5 p-1 sm:px-2.5 sm:py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-white">
+            {currentUser.photoURL ? (
+              <img
+                src={currentUser.photoURL}
+                alt={currentUser.displayName || 'User'}
+                className="w-5 h-5 rounded-full object-cover border border-emerald-400/50"
+              />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-emerald-500/30 text-emerald-300 flex items-center justify-center text-[10px] font-bold">
+                {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="hidden md:flex flex-col text-left">
+              <span className="text-[11px] font-medium leading-none text-emerald-200">
+                {currentUser.displayName || 'Cloud User'}
+              </span>
+              <span className="text-[9px] font-mono text-emerald-400/70 flex items-center gap-1">
+                <Database className="w-2.5 h-2.5" /> Firestore Synced
+              </span>
+            </div>
+            {onLogout && (
+              <button
+                type="button"
+                id="btn-header-signout"
+                onClick={onLogout}
+                className="p-1 text-white/50 hover:text-rose-300 transition-colors ml-1 cursor-pointer"
+                title="Sign out of Firebase"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        ) : (
+          onLogin && (
+            <button
+              type="button"
+              id="btn-header-signin"
+              onClick={onLogin}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/20 text-white font-medium text-xs transition cursor-pointer shadow-sm"
+              title="Sign in with Google to sync voice history, memories, and studio creations to Firebase"
+            >
+              <LogIn className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">Sign In</span>
+            </button>
+          )
+        )}
 
         {/* Reminders / Alerts button */}
         <button

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PersonalityMode } from '../types';
+import { PersonalityMode, SpeechSentiment } from '../types';
 import { PERSONALITIES } from '../data/personalities';
-import { Mic, Volume2, Sparkles, Radio, AudioWaveform, Activity, Waves } from 'lucide-react';
+import { SENTIMENT_CONFIGS } from '../utils/sentiment';
+import { Mic, Volume2, Sparkles, Radio, AudioWaveform, Activity, Waves, Pause, Hand } from 'lucide-react';
 import { audioService } from '../utils/audio';
 
 interface HolographicOrbProps {
@@ -9,7 +10,9 @@ interface HolographicOrbProps {
   isSpeaking: boolean;
   isListening: boolean;
   isProcessing: boolean;
+  isPaused?: boolean;
   onOrbClick?: () => void;
+  currentSentiment?: SpeechSentiment;
 }
 
 export const HolographicOrb: React.FC<HolographicOrbProps> = ({
@@ -17,7 +20,9 @@ export const HolographicOrb: React.FC<HolographicOrbProps> = ({
   isSpeaking,
   isListening,
   isProcessing,
+  isPaused = false,
   onOrbClick,
+  currentSentiment = 'calm',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const innerCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -195,7 +200,8 @@ export const HolographicOrb: React.FC<HolographicOrbProps> = ({
       else if (isListening) energyMultiplier = 1.6 + normalizedEnergy * 1.5;
       else if (isProcessing) energyMultiplier = 1.6;
 
-      const baseColor = personality.themeColor;
+      const sentimentConfig = SENTIMENT_CONFIGS[currentSentiment] || SENTIMENT_CONFIGS.calm;
+      const baseColor = isSpeaking ? sentimentConfig.primaryColor : personality.themeColor;
 
       // 1. Ambient Background Glow
       const bgGrad = ctx.createRadialGradient(
@@ -618,6 +624,22 @@ export const HolographicOrb: React.FC<HolographicOrbProps> = ({
                   <span>FFT 128</span>
                 </div>
               </div>
+            ) : isPaused ? (
+              <>
+                <div className="text-[10px] tracking-[0.2em] font-bold text-amber-400 uppercase flex items-center gap-1">
+                  <Pause className="w-3.5 h-3.5" />
+                  <span>PAUSED</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 my-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40">
+                  <Hand className="w-3.5 h-3.5 text-amber-300 animate-bounce" />
+                  <span className="text-[9px] font-mono text-amber-200">WAVE TO RESUME</span>
+                </div>
+
+                <div className="text-[9px] tracking-widest font-mono text-white/40">
+                  TAP OR WAVE HAND
+                </div>
+              </>
             ) : (
               <>
                 <div className="text-[10px] tracking-[0.2em] font-semibold text-white/50 uppercase">
@@ -659,24 +681,48 @@ export const HolographicOrb: React.FC<HolographicOrbProps> = ({
         id="sophia-orb-status-badge"
         className="mt-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase border backdrop-blur-md transition-all duration-300 flex items-center gap-2"
         style={{
-          backgroundColor: isListening ? 'rgba(16, 185, 129, 0.15)' : `${personality.themeColor}18`,
-          borderColor: isListening ? 'rgba(16, 185, 129, 0.4)' : `${personality.themeColor}55`,
+          backgroundColor: isPaused
+            ? 'rgba(245, 158, 11, 0.2)'
+            : isListening
+            ? 'rgba(16, 185, 129, 0.15)'
+            : `${personality.themeColor}18`,
+          borderColor: isPaused
+            ? 'rgba(245, 158, 11, 0.5)'
+            : isListening
+            ? 'rgba(16, 185, 129, 0.4)'
+            : `${personality.themeColor}55`,
           color: '#ffffff',
-          boxShadow: `0 0 16px ${isListening ? 'rgba(16, 185, 129, 0.3)' : personality.glowColor}`,
+          boxShadow: `0 0 16px ${
+            isPaused
+              ? 'rgba(245, 158, 11, 0.35)'
+              : isListening
+              ? 'rgba(16, 185, 129, 0.3)'
+              : personality.glowColor
+          }`,
         }}
       >
         <span
           className={`w-2 h-2 rounded-full ${
-            isSpeaking
+            isPaused
+              ? 'bg-amber-400 animate-ping'
+              : isSpeaking
               ? 'animate-ping'
               : isListening
               ? 'animate-pulse bg-emerald-400'
               : 'bg-white'
           }`}
-          style={{ backgroundColor: isListening ? '#10b981' : personality.themeColor }}
+          style={{
+            backgroundColor: isPaused
+              ? '#f59e0b'
+              : isListening
+              ? '#10b981'
+              : personality.themeColor,
+          }}
         />
         <span>
-          {isProcessing
+          {isPaused
+            ? '⏸️ Sophia Paused (Wave to Resume)'
+            : isProcessing
             ? 'Sophia Processing...'
             : isSpeaking
             ? 'Sophia Speaking'

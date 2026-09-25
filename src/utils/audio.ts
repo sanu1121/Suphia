@@ -4,6 +4,7 @@ class AudioManager {
   private audioCtx: AudioContext | null = null;
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private isSpeaking = false;
+  private isSpeechPaused = false;
   private onSpeakingStateChange?: (speaking: boolean) => void;
   private micStream: MediaStream | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
@@ -248,7 +249,7 @@ class AudioManager {
   }
 
   // Play synthetic sci-fi UI sound effects using Web Audio API oscillators
-  public playSoundEffect(type: 'activate' | 'switch' | 'listening' | 'tool' | 'success' | 'error') {
+  public playSoundEffect(type: 'activate' | 'switch' | 'listening' | 'tool' | 'success' | 'error' | 'pause' | 'resume') {
     try {
       const ctx = this.getAudioContext();
       const now = ctx.currentTime;
@@ -265,6 +266,26 @@ class AudioManager {
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
         osc.start(now);
         osc.stop(now + 0.25);
+      } else if (type === 'pause') {
+        // Sci-Fi Cryogenic Stasis Pause Chime: Descending dual harmonic warp
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(320, now + 0.28);
+        gain.gain.setValueAtTime(0.14, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc.start(now);
+        osc.stop(now + 0.32);
+      } else if (type === 'resume') {
+        // Sci-Fi Re-engagement Shimmer: Ascending bright resonance
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(340, now);
+        osc.frequency.setValueAtTime(520, now + 0.08);
+        osc.frequency.setValueAtTime(880, now + 0.16);
+        osc.frequency.exponentialRampToValueAtTime(1180, now + 0.28);
+        gain.gain.setValueAtTime(0.13, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
       } else if (type === 'switch') {
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(523.25, now);
@@ -376,6 +397,7 @@ class AudioManager {
 
   // Stop any active speech immediately
   public stopSpeaking() {
+    this.isSpeechPaused = false;
     if (this.activeBufferSource) {
       try {
         this.activeBufferSource.stop();
@@ -390,6 +412,75 @@ class AudioManager {
     if (this.onSpeakingStateChange) {
       this.onSpeakingStateChange(false);
     }
+  }
+
+  // Pause active speech (Web Audio buffer suspension or SpeechSynthesis pause)
+  public pauseSpeaking(): boolean {
+    if (!this.isSpeaking && !this.isSpeechPaused) return false;
+    this.isSpeechPaused = true;
+
+    // 1. Suspend Web Audio Context if playing neural audio buffer
+    if (this.audioCtx && this.audioCtx.state === 'running' && this.activeBufferSource) {
+      try {
+        this.audioCtx.suspend();
+      } catch (err) {
+        console.warn('AudioContext pause/suspend exception:', err);
+      }
+    }
+
+    // 2. Pause Web Speech Synthesis if speaking via browser voice
+    if (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking) {
+      try {
+        window.speechSynthesis.pause();
+      } catch (err) {
+        console.warn('SpeechSynthesis pause exception:', err);
+      }
+    }
+
+    if (this.onSpeakingStateChange) {
+      this.onSpeakingStateChange(false);
+    }
+    return true;
+  }
+
+  // Resume paused speech
+  public resumeSpeaking(): boolean {
+    if (!this.isSpeechPaused) return false;
+    this.isSpeechPaused = false;
+
+    // 1. Resume Web Audio Context if suspended
+    if (this.audioCtx && this.audioCtx.state === 'suspended' && this.activeBufferSource) {
+      try {
+        this.audioCtx.resume();
+        this.isSpeaking = true;
+        if (this.onSpeakingStateChange) {
+          this.onSpeakingStateChange(true);
+        }
+        return true;
+      } catch (err) {
+        console.warn('AudioContext resume exception:', err);
+      }
+    }
+
+    // 2. Resume Web Speech Synthesis if paused
+    if (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.paused) {
+      try {
+        window.speechSynthesis.resume();
+        this.isSpeaking = true;
+        if (this.onSpeakingStateChange) {
+          this.onSpeakingStateChange(true);
+        }
+        return true;
+      } catch (err) {
+        console.warn('SpeechSynthesis resume exception:', err);
+      }
+    }
+
+    return false;
+  }
+
+  public isSpeakingPaused(): boolean {
+    return this.isSpeechPaused;
   }
 
   // Play Decoded Audio (ElevenLabs MP3 / AAC / WAV) via Web Audio API decodeAudioData

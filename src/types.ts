@@ -1,3 +1,6 @@
+import { SpeechSentiment } from './utils/sentiment';
+export type { SpeechSentiment };
+
 export type PersonalityMode = 'girlfriend' | 'assistant' | 'friend' | 'mentor' | 'waifu';
 
 export interface PersonalityConfig {
@@ -40,6 +43,30 @@ export interface ChatMessage {
   thinkingModel?: string;
   relayActive?: boolean;
   voiceProvider?: string;
+  sentiment?: SpeechSentiment;
+}
+
+export interface MusicTrack {
+  id: string;
+  title: string;
+  prompt: string;
+  audioUrl?: string;
+  audioBase64?: string;
+  durationSeconds: number;
+  genre: string;
+  bpm?: number;
+  createdAt: number;
+  model: string;
+}
+
+export interface GeneratedMedia {
+  id: string;
+  type: 'image' | 'video';
+  prompt: string;
+  url: string;
+  aspectRatio: string;
+  model: string;
+  createdAt: number;
 }
 
 export interface TaskItem {

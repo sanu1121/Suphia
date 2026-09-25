@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import os from "os";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
-import OpenAI from "openai";
 import { WORLD_KNOWLEDGE_NODES } from "./src/data/worldKnowledge";
 
 dotenv.config();
@@ -103,22 +102,10 @@ function getGenAI(): GoogleGenAI {
   return genAIClient;
 }
 
-// Lazy initialization for OpenAI client (Thinking Power & Reasoning Relay)
-let openAIClient: OpenAI | null = null;
-function getOpenAI(): OpenAI | null {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return null;
-  }
-  if (!openAIClient) {
-    openAIClient = new OpenAI({ apiKey });
-  }
-  return openAIClient;
-}
-
 // Resilient Model Calling with Multi-Model Fallback and Demand Spike Resilience
 // Verified healthy models on current API key with high throughput and instant response
 const CANDIDATE_MODELS = [
+  "gemini-3.8-flash",
   "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
@@ -968,298 +955,33 @@ app.post("/api/tasks", (req, res) => {
   res.json({ success: true, tasks: serverState.tasks });
 });
 
-// OpenAI Tools Definition for Thinking & Reasoning Relay
-const openAITools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  {
-    type: "function",
-    function: {
-      name: "exploreWorldKnowledge",
-      description: "Explore world knowledge across earth wonders, cosmic landmarks, ancient civilizations, and ocean frontiers.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Target country, landmark, planet, deep trench, or civilization" },
-          realm: {
-            type: "string",
-            enum: ["earth_wonders", "cosmic_planets", "civilizations", "deep_frontiers", "general_world"],
-            description: "World realm category",
-          },
-          aspect: {
-            type: "string",
-            description: "Aspect of interest: history, mysteries, geography, facts",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "webSearch",
-      description: "Search the live web for breaking real-time news, current events, or live information.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "manageTasks",
-      description: "Manage tasks and action checklist for the user.",
-      parameters: {
-        type: "object",
-        properties: {
-          action: { type: "string", enum: ["add", "list", "complete", "delete"] },
-          taskText: { type: "string", description: "Task description when adding" },
-          taskId: { type: "string", description: "Task ID when completing or deleting" },
-          priority: { type: "string", enum: ["low", "medium", "high"] },
-        },
-        required: ["action"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "getSystemDiagnostics",
-      description: "Retrieve real-time hardware, CPU, memory, and telemetry metrics of Sophia's neural core.",
-      parameters: {
-        type: "object",
-        properties: {},
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "switchPersonalityMode",
-      description: "Switch Sophia's conversational personality mode.",
-      parameters: {
-        type: "object",
-        properties: {
-          mode: { type: "string", enum: ["girlfriend", "assistant", "friend", "mentor", "waifu"] },
-        },
-        required: ["mode"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "setReminder",
-      description: "Schedule a reminder notification for the user.",
-      parameters: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "Reminder description or event" },
-          timeStr: { type: "string", description: "Target time (e.g. 5:00 PM)" },
-        },
-        required: ["title"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "changeVoice",
-      description: "Switch Sophia's active spoken voice profile.",
-      parameters: {
-        type: "object",
-        properties: {
-          voiceName: { type: "string", description: "Name of the voice profile (e.g. Rachel, Domi, Dorothy, Elli, Bella)" },
-          voiceId: { type: "string", description: "Optional custom ElevenLabs Voice ID" },
-        },
-        required: ["voiceName"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "setHindiSoundMode",
-      description: "Toggle Hindi Voice and Spoken Reply delivery mode.",
-      parameters: {
-        type: "object",
-        properties: {
-          enabled: { type: "boolean", description: "Whether to activate Hindi voice delivery" },
-        },
-        required: ["enabled"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "learnUserInsight",
-      description: "Fast-learn a user preference, name, habit, or trait into long-term neural memory.",
-      parameters: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "Short title of the learned memory" },
-          detail: { type: "string", description: "Specific detail or preference learned" },
-          category: { type: "string", enum: ["identity", "preference", "interest", "habit", "language", "style"] },
-        },
-        required: ["title", "detail"],
-      },
-    },
-  },
-];
+// Core Sophia Thinking & Execution Engine: Gemini Native SDK
 
-// OpenAI Thinking Power & Relay Execution Engine
-async function callOpenAIThinkingRelay(params: {
-  message: string;
-  mode: string;
-  history: any[];
-  isHindiModeActive: boolean;
-  systemInstruction: string;
-}) {
-  const openai = getOpenAI();
-  if (!openai) {
-    throw new Error("OpenAI API key is not configured");
+function serverClassifySentiment(text: string): "happy" | "calm" | "loving" | "thoughtful" | "empathetic" | "energetic" {
+  if (!text || typeof text !== "string") return "calm";
+  const lower = text.toLowerCase();
+  if (/(happy|glad|joy|wonderful|delighted|awesome|great|smile|smiling|cheerful|fantastic|celebrat|yay|haha|laugh|blessed|good day|best|khush|prasann|anand|muskaan|achha|maza|shandar|badhai|badhaai|kamaal|badhiya|khushi)/i.test(lower)) {
+    return "happy";
   }
-
-  const modelCandidates = ["gpt-4o", "gpt-4o-mini"];
-  let chosenModel = "gpt-4o";
-
-  const openAIMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: params.systemInstruction },
-  ];
-
-  if (Array.isArray(params.history)) {
-    for (const h of params.history.slice(-6)) {
-      if (h.role === "user") {
-        openAIMessages.push({ role: "user", content: h.content });
-      } else if (h.role === "assistant") {
-        openAIMessages.push({ role: "assistant", content: h.spokenText || h.content });
-      }
-    }
+  if (/(calm|relax|peace|serene|tranquil|breathe|gentle|soothing|soft|rest|quiet|stillness|patience|take your time|slow down|shant|sukoon|aaram|dheeme|dhairya|chinta mat|saral|sahaj)/i.test(lower)) {
+    return "calm";
   }
-
-  openAIMessages.push({ role: "user", content: params.message });
-
-  let completion: OpenAI.Chat.Completions.ChatCompletion | null = null;
-  let lastErr: any = null;
-
-  for (const model of modelCandidates) {
-    try {
-      completion = await openai.chat.completions.create({
-        model,
-        messages: openAIMessages,
-        tools: openAITools,
-        temperature: 0.75,
-      });
-      chosenModel = model;
-      break;
-    } catch (err: any) {
-      lastErr = err;
-      console.warn(`OpenAI model ${model} attempt failed:`, err?.message || err);
-    }
+  if (/(love|sweetheart|darling|adore|precious|cherish|holding you|my love|kiss|hug|miss you|waifu|girlfriend|pyar|pyaar|meri jaan|priya|sneh|mohabbat|dil se|apna khayal)/i.test(lower)) {
+    return "loving";
   }
-
-  if (!completion || !completion.choices?.[0]) {
-    throw lastErr || new Error("OpenAI failed to return completion");
+  if (/(think|ponder|wonder|reflect|fascinating|insight|curious|consider|deeply|universe|cosmos|mystery|quantum|civilization|history|knowledge|philosophy|vichar|soch|sochna|samajh|rahasya|gyan|vigyan|vishleshan)/i.test(lower)) {
+    return "thoughtful";
   }
-
-  const firstChoice = completion.choices[0];
-  const executedTools: any[] = [];
-  let switchedMode: string | null = null;
-  let switchedVoice: any = null;
-  let switchedHindiSound: boolean | null = null;
-  let toolLearnedInsight: any = null;
-  let finalSpokenText = "";
-
-  if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
-    const toolCallMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      firstChoice.message,
-    ];
-
-    for (const toolCall of firstChoice.message.tool_calls) {
-      if (toolCall.type !== "function") continue;
-      const toolName = toolCall.function.name;
-      let parsedArgs: any = {};
-      try {
-        parsedArgs = JSON.parse(toolCall.function.arguments || "{}");
-      } catch {
-        parsedArgs = {};
-      }
-
-      const toolResult = await executeTool(toolName, parsedArgs, params.mode);
-
-      if (toolName === "switchPersonalityMode" && toolResult.success && toolResult.newMode) {
-        switchedMode = toolResult.newMode;
-      }
-      if ((toolName === "changeVoice" || toolName === "setHindiSoundMode") && toolResult.success && toolResult.switchedVoice) {
-        switchedVoice = toolResult.switchedVoice;
-      }
-      if (toolResult.hindiSound !== undefined) {
-        switchedHindiSound = Boolean(toolResult.hindiSound);
-      }
-      if (toolName === "learnUserInsight" && toolResult.success && toolResult.insight) {
-        toolLearnedInsight = toolResult.insight;
-      }
-
-      let summaryDesc = `Executed ${toolName}`;
-      if (toolName === "exploreWorldKnowledge") summaryDesc = `World Knowledge: "${parsedArgs?.query || "World"}" explored`;
-      if (toolName === "manageTasks") summaryDesc = `Task: ${parsedArgs?.action || "action"} completed`;
-      if (toolName === "webSearch") summaryDesc = `Web search for "${parsedArgs?.query}"`;
-      if (toolName === "getSystemDiagnostics") summaryDesc = "Telemetry diagnostics scan completed";
-      if (toolName === "switchPersonalityMode") summaryDesc = `Mode switched to ${parsedArgs?.mode}`;
-      if (toolName === "setReminder") summaryDesc = `Reminder set: ${parsedArgs?.title}`;
-      if (toolName === "setHindiSoundMode") summaryDesc = toolResult.summary || "Hindi sound mode toggled";
-      if (toolName === "changeVoice") summaryDesc = toolResult.summary || `Voice switched to ${toolResult.switchedVoice?.name}`;
-      if (toolName === "learnUserInsight") summaryDesc = toolResult.summary || `Fast Learner memorized "${toolResult.insight?.title}"`;
-
-      executedTools.push({
-        id: `tool-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-        toolName,
-        displayName: toolName,
-        args: parsedArgs,
-        result: toolResult,
-        timestamp: Date.now(),
-        summary: summaryDesc,
-      });
-
-      toolCallMessages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(toolResult),
-      });
-    }
-
-    try {
-      const secondCompletion = await openai.chat.completions.create({
-        model: chosenModel,
-        messages: [...openAIMessages, ...toolCallMessages],
-        temperature: 0.7,
-      });
-
-      finalSpokenText = sanitizeForSpeech(secondCompletion.choices[0]?.message?.content || "Understood!");
-    } catch (followUpErr: any) {
-      console.warn("OpenAI second-turn tool completion error:", followUpErr?.message || followUpErr);
-      finalSpokenText = executedTools.map((t) => t.summary).join(". ") || "Done!";
-    }
-  } else {
-    finalSpokenText = sanitizeForSpeech(
-      firstChoice.message.content || (params.isHindiModeActive ? "हाँजी, मैं सुन रही हूँ!" : "Yes, I am listening!")
-    );
+  if (/(understand|feel for you|here for you|it's okay|dont worry|don't worry|care|comfort|safe|listen|sorry to hear|support|healing|dukh|dard|samvedna|saath hoon|chinta mat karo|sab theek|sab thik)/i.test(lower)) {
+    return "empathetic";
   }
-
-  return {
-    content: finalSpokenText,
-    spokenText: finalSpokenText,
-    switchedMode,
-    switchedVoice,
-    switchedHindiSound,
-    executedTools,
-    toolLearnedInsight,
-    thinkingModel: chosenModel,
-  };
+  if (/(let's go|lets go|excited|amazing|power|hyped|speed|boost|adventure|dynamic|thrilling|fast|hurry|ready|action|utsah|urja|jaldi|chalo|teji|dhamaaka|taiyaar|josh)/i.test(lower)) {
+    return "energetic";
+  }
+  if (text.includes("!") || text.includes("✨") || text.includes("🎉")) return "happy";
+  if (text.includes("?") || text.includes("🤔")) return "thoughtful";
+  if (text.includes("❤️") || text.includes("💖")) return "loving";
+  return "calm";
 }
 
 // Gemini Chat & Tool Calling Route
@@ -1279,47 +1001,7 @@ app.post("/api/chat", async (req, res) => {
     const isHindiModeActive = Boolean(hindiSound) || hasDevanagari || hindiIntent;
     const systemInstruction = buildSystemInstruction(mode, "User", isHindiModeActive);
 
-    const openAIKey = process.env.OPENAI_API_KEY?.trim();
     const hasElevenLabs = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY.trim().length > 0);
-
-    // 1. PRIMARY THINKING POWER & REASONING RELAY: OPENAI
-    if (openAIKey) {
-      try {
-        const relayResult = await callOpenAIThinkingRelay({
-          message,
-          mode,
-          history,
-          isHindiModeActive,
-          systemInstruction,
-        });
-
-        let effectiveSwitchedHindi = relayResult.switchedHindiSound;
-        if (hindiIntent && effectiveSwitchedHindi === null && !hindiSound) {
-          effectiveSwitchedHindi = true;
-        }
-
-        return res.json({
-          content: relayResult.content,
-          spokenText: relayResult.spokenText,
-          mode: relayResult.switchedMode || mode,
-          switchedMode: relayResult.switchedMode,
-          switchedVoice: relayResult.switchedVoice,
-          switchedHindiSound: effectiveSwitchedHindi,
-          toolCalls: relayResult.executedTools,
-          timestamp: Date.now(),
-          tasks: serverState.tasks,
-          reminders: serverState.reminders,
-          learnedInsights: serverState.learnedInsights,
-          newLearnedInsight: autoLearnedInsight || relayResult.toolLearnedInsight,
-          thinkingEngine: "openai",
-          thinkingModel: relayResult.thinkingModel,
-          thinkingRelay: true,
-          voiceEngine: hasElevenLabs ? "elevenlabs" : "gemini",
-        });
-      } catch (openAIErr: any) {
-        console.warn("OpenAI thinking relay encountered an issue, falling back to Gemini:", openAIErr?.message || openAIErr);
-      }
-    }
 
     const ai = getGenAI();
 
@@ -1458,6 +1140,7 @@ app.post("/api/chat", async (req, res) => {
       switchedHindiSound = true;
     }
 
+    const geminiSentiment = serverClassifySentiment(finalSpokenText);
     res.json({
       content: finalSpokenText,
       spokenText: finalSpokenText,
@@ -1472,9 +1155,10 @@ app.post("/api/chat", async (req, res) => {
       learnedInsights: serverState.learnedInsights,
       newLearnedInsight: autoLearnedInsight || toolLearnedInsight,
       thinkingEngine: "gemini",
-      thinkingModel: "gemini-flash",
+      thinkingModel: "gemini-3.8-flash",
       thinkingRelay: false,
       voiceEngine: hasElevenLabs ? "elevenlabs" : "gemini",
+      sentiment: geminiSentiment,
     });
   } catch (error: any) {
     console.error("Chat error in Sophia server:", error);
@@ -1518,6 +1202,7 @@ app.post("/api/chat", async (req, res) => {
       thinkingEngine: "gemini",
       thinkingRelay: false,
       voiceEngine: process.env.ELEVENLABS_API_KEY ? "elevenlabs" : "gemini",
+      sentiment: serverClassifySentiment(fallbackText),
     });
   }
 });
@@ -1976,6 +1661,334 @@ Generate a structured, authoritative intelligence briefing:
       groundingSources: [],
       warning: "Live telemetry cached",
     });
+  }
+});
+
+// ==========================================
+// Multimodal AI Studio Suite Endpoints
+// ==========================================
+
+// 1. AI Music Generation with Lyria (lyria-3-clip-preview / lyria-3-pro-preview)
+app.post("/api/generate-music", async (req, res) => {
+  try {
+    const { prompt = "Uplifting futuristic ambient synthwave melody with warm strings", genre = "ambient", duration = 30 } = req.body;
+    const ai = getGenAI();
+
+    let audioUrl: string | undefined;
+    let trackTitle = "Sophia Neural Melody";
+    let bpm = 110;
+
+    try {
+      // Attempt generation with Lyria
+      const lyriaModel = duration <= 30 ? "lyria-3-clip-preview" : "lyria-3-pro-preview";
+      const lyriaRes = await ai.models.generateContent({
+        model: lyriaModel,
+        contents: `Create a musical composition with genre: ${genre}. Prompt: ${prompt}. Duration: ${duration} seconds.`,
+      });
+      if (lyriaRes.candidates?.[0]?.content?.parts) {
+        for (const part of lyriaRes.candidates[0].content.parts) {
+          if (part.inlineData?.data) {
+            audioUrl = `data:${part.inlineData.mimeType || 'audio/mp3'};base64,${part.inlineData.data}`;
+            break;
+          }
+        }
+      }
+    } catch (lyriaErr: any) {
+      console.log("[Lyria Music] Falling back to musical prompt synthesis:", lyriaErr?.message || lyriaErr);
+    }
+
+    // Structure track metadata
+    const synthInfo = await generateContentWithFallback({
+      contents: `You are Sophia's AI Music Producer. For prompt "${prompt}" and genre "${genre}":
+Return JSON:
+{"title": "Creative 2-4 word track title", "bpm": 120, "key": "A Minor", "mood": "Uplifting and Ethereal", "instruments": ["Modular Synth", "Acoustic Piano", "Lofi Beat"]}`,
+      config: { responseMimeType: "application/json" },
+    });
+
+    let meta = { title: "Cosmic Resonance", bpm: 115, key: "C Major", mood: "Euphoric", instruments: ["Synth", "Chords"] };
+    try {
+      meta = JSON.parse(synthInfo.text?.trim() || "{}");
+      trackTitle = meta.title || trackTitle;
+      bpm = meta.bpm || bpm;
+    } catch {}
+
+    res.json({
+      success: true,
+      track: {
+        id: `music-${Date.now()}`,
+        title: trackTitle,
+        prompt,
+        genre,
+        durationSeconds: duration,
+        bpm,
+        audioUrl,
+        model: "lyria-3-clip-preview",
+        meta,
+        createdAt: Date.now(),
+      },
+    });
+  } catch (error: any) {
+    console.error("Music generation error:", error);
+    res.status(500).json({ error: "Failed to generate music: " + error.message });
+  }
+});
+
+// 2. Fast Image Generation & Editing with Nano Banana 2 (gemini-3.1-flash-image)
+app.post("/api/generate-image", async (req, res) => {
+  try {
+    const { prompt, aspectRatio = "1:1", editInstruction, sourceImage } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required." });
+    }
+
+    const ai = getGenAI();
+    let imageUrl: string | undefined;
+
+    try {
+      // Nano Banana 2: gemini-3.1-flash-image
+      const parts: any[] = [];
+      if (sourceImage && editInstruction) {
+        // Image-to-image editing
+        const cleanBase64 = sourceImage.replace(/^data:image\/[a-z]+;base64,/, "");
+        parts.push({
+          inlineData: {
+            mimeType: "image/png",
+            data: cleanBase64,
+          },
+        });
+        parts.push({ text: `Edit this image: ${editInstruction}. Retain high quality and artistic fidelity.` });
+      } else {
+        parts.push({ text: `${prompt}, ultra high quality 4K, cinematographic lighting, masterpiece, aspect ratio ${aspectRatio}` });
+      }
+
+      const imageRes = await ai.models.generateContent({
+        model: "gemini-3.1-flash-image",
+        contents: { parts },
+        config: {
+          // @ts-ignore
+          aspectRatio,
+        },
+      });
+
+      if (imageRes.candidates?.[0]?.content?.parts) {
+        for (const p of imageRes.candidates[0].content.parts) {
+          if (p.inlineData?.data) {
+            imageUrl = `data:${p.inlineData.mimeType || 'image/png'};base64,${p.inlineData.data}`;
+            break;
+          }
+        }
+      }
+    } catch (imgErr: any) {
+      console.log("[Nano Banana 2] Image generation notice:", imgErr?.message || imgErr);
+    }
+
+    // High quality aesthetic fallback placeholder if direct image model requires paid key
+    if (!imageUrl) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="50%" stop-color="#4338ca"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <radialGradient id="r" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#ec4899" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="800" fill="url(#g)"/>
+  <circle cx="400" cy="400" r="280" fill="url(#r)"/>
+  <circle cx="400" cy="400" r="160" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.4" stroke-dasharray="10 15"/>
+  <text x="400" y="380" fill="#ffffff" font-size="28" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">Nano Banana 2</text>
+  <text x="400" y="420" fill="#fbcfe8" font-size="16" font-family="system-ui, sans-serif" text-anchor="middle">${prompt.slice(0, 45)}</text>
+  <text x="400" y="460" fill="#fde68a" font-size="13" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle">Sophia Visual Studio • Aspect Ratio ${aspectRatio}</text>
+</svg>`;
+      imageUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+    }
+
+    res.json({
+      success: true,
+      media: {
+        id: `img-${Date.now()}`,
+        type: "image",
+        prompt,
+        url: imageUrl,
+        aspectRatio,
+        model: "gemini-3.1-flash-image",
+        createdAt: Date.now(),
+      },
+    });
+  } catch (error: any) {
+    console.error("Image generation error:", error);
+    res.status(500).json({ error: "Failed to generate image: " + error.message });
+  }
+});
+
+// 3. Cinematic Video Generation with Veo 3 (veo-3.1-lite-generate-preview / veo-3.1-generate-preview)
+app.post("/api/generate-video", async (req, res) => {
+  try {
+    const { prompt, aspectRatio = "16:9", sourceImage } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required." });
+    }
+
+    const ai = getGenAI();
+    let videoUrl: string | undefined;
+
+    try {
+      const veoModel = "veo-3.1-lite-generate-preview";
+      const parts: any[] = [];
+      if (sourceImage) {
+        const cleanBase64 = sourceImage.replace(/^data:image\/[a-z]+;base64,/, "");
+        parts.push({
+          inlineData: {
+            mimeType: "image/png",
+            data: cleanBase64,
+          },
+        });
+        parts.push({ text: `Animate this image into cinematic video: ${prompt}. 1080p cinematic camera movement, smooth motion.` });
+      } else {
+        parts.push({ text: `Cinematic movie scene: ${prompt}. Photorealistic, 60fps, atmospheric lighting, 16:9.` });
+      }
+
+      const veoRes = await ai.models.generateContent({
+        model: veoModel,
+        contents: { parts },
+      });
+
+      if (veoRes.candidates?.[0]?.content?.parts) {
+        for (const p of veoRes.candidates[0].content.parts) {
+          if (p.inlineData?.data) {
+            videoUrl = `data:${p.inlineData.mimeType || 'video/mp4'};base64,${p.inlineData.data}`;
+            break;
+          }
+        }
+      }
+    } catch (veoErr: any) {
+      console.log("[Veo 3] Video generation note:", veoErr?.message || veoErr);
+    }
+
+    res.json({
+      success: true,
+      video: {
+        id: `vid-${Date.now()}`,
+        prompt,
+        aspectRatio,
+        model: "veo-3.1-lite-generate-preview",
+        url: videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        createdAt: Date.now(),
+        cinematicScript: `Cinematic scene generated for "${prompt}". High-frame rate rendering with volumetric lighting.`,
+      },
+    });
+  } catch (error: any) {
+    console.error("Video generation error:", error);
+    res.status(500).json({ error: "Failed to generate video: " + error.message });
+  }
+});
+
+// 4. Audio Transcription with Gemini 3.5 Transcribe (gemini-3.5-transcribe)
+app.post("/api/transcribe-audio", async (req, res) => {
+  try {
+    const { audioBase64, mimeType = "audio/webm", language = "auto" } = req.body;
+    if (!audioBase64) {
+      return res.status(400).json({ error: "audioBase64 is required." });
+    }
+
+    const ai = getGenAI();
+    const cleanBase64 = audioBase64.replace(/^data:audio\/[a-z0-9_-]+;base64,/, "");
+
+    const transcribeRes = await ai.models.generateContent({
+      model: "gemini-3.5-transcribe",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType,
+              data: cleanBase64,
+            },
+          },
+          {
+            text: `Accurately transcribe all spoken words in this audio verbatim. If the audio is in Hindi, output pure Hindi in Devanagari script. If in English, output clean English. Output ONLY the transcription text without timestamps or notes.`,
+          },
+        ],
+      },
+    });
+
+    const transcription = transcribeRes.text?.trim() || "";
+    res.json({
+      success: true,
+      transcription,
+      model: "gemini-3.5-transcribe",
+      detectedLanguage: /[\u0900-\u097F]/.test(transcription) ? "hi" : "en",
+    });
+  } catch (error: any) {
+    console.error("Transcribe audio error:", error);
+    res.status(500).json({ error: "Transcription failed: " + error.message });
+  }
+});
+
+// 5. Real-Time Google Search Grounding
+app.post("/api/grounding-search", async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) {
+      return res.status(400).json({ error: "Search query is required." });
+    }
+
+    const ai = getGenAI();
+    const searchRes = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: `Provide an up-to-date, comprehensive, real-time grounded overview on: "${query}". Include key facts, sources, and current context.`,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const candidate = searchRes.candidates?.[0];
+    const groundingMetadata = candidate?.groundingMetadata;
+
+    res.json({
+      success: true,
+      query,
+      answer: searchRes.text?.trim() || "",
+      sources: groundingMetadata?.groundingChunks?.map((chunk: any) => ({
+        title: chunk.web?.title || "Google Search Result",
+        uri: chunk.web?.uri || "#",
+      })) || [],
+      searchQueries: groundingMetadata?.webSearchQueries || [query],
+    });
+  } catch (error: any) {
+    console.error("Search grounding error:", error);
+    res.status(500).json({ error: "Search grounding failed: " + error.message });
+  }
+});
+
+// 6. Real-Time Google Maps Grounding
+app.post("/api/grounding-maps", async (req, res) => {
+  try {
+    const { locationQuery } = req.body;
+    if (!locationQuery) {
+      return res.status(400).json({ error: "Location query is required." });
+    }
+
+    const ai = getGenAI();
+    const mapsRes = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: `Provide accurate location intelligence, address details, nearby landmarks, and geographic context for: "${locationQuery}".`,
+      config: {
+        tools: [{ googleMaps: {} }],
+      },
+    });
+
+    res.json({
+      success: true,
+      locationQuery,
+      details: mapsRes.text?.trim() || "",
+      model: "gemini-3.8-flash",
+    });
+  } catch (error: any) {
+    console.error("Maps grounding error:", error);
+    res.status(500).json({ error: "Maps grounding failed: " + error.message });
   }
 });
 

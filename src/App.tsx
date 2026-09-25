@@ -24,9 +24,24 @@ import { RemindersDrawer } from './components/RemindersDrawer';
 import { WorldKnowledgeMatrix } from './components/WorldKnowledgeMatrix';
 import { VoiceModeModal } from './components/VoiceModeModal';
 import { FastLearnerMemoryModal } from './components/FastLearnerMemoryModal';
+import { MultimodalStudioModal } from './components/MultimodalStudioModal';
+import { WebcamGestureInterface } from './components/WebcamGestureInterface';
+import { SpeechSentiment, analyzeSpeechSentiment } from './utils/sentiment';
+import {
+  auth,
+  loginWithGoogle,
+  logoutUser,
+  syncUserProfile,
+  saveChatMessageToFirestore,
+  subscribeToChatMessages,
+  saveLearnedInsightToFirestore,
+  subscribeToLearnedInsights,
+} from './firebase';
+import { User as FirebaseUser, onAuthStateChanged } from 'firebase/auth';
 
 export default function App() {
   // State definitions
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [currentMode, setCurrentMode] = useState<PersonalityMode>('girlfriend');
   const [activeView, setActiveView] = useState<'voice_hud' | 'world_knowledge'>('voice_hud');
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -41,6 +56,24 @@ export default function App() {
   const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
   const [learnedInsights, setLearnedInsights] = useState<LearnedInsight[]>([]);
+  const [currentSentiment, setCurrentSentiment] = useState<SpeechSentiment>('calm');
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [isSophiaPaused, setIsSophiaPaused] = useState(false);
+  const [isGestureControlEnabled, setIsGestureControlEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('sophia_gesture_control') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isGestureHUDOpen, setIsGestureHUDOpen] = useState(false);
+
+  const handleUpdateGestureEnabled = (enabled: boolean) => {
+    setIsGestureControlEnabled(enabled);
+    try {
+      localStorage.setItem('sophia_gesture_control', String(enabled));
+    } catch {}
+  };
 
   useEffect(() => {
     fetch('/api/voice-status')
@@ -48,6 +81,36 @@ export default function App() {
       .then((data) => setVoiceStatus(data))
       .catch(() => setVoiceStatus({ elevenLabsActive: false, provider: 'gemini' }));
   }, []);
+
+  // Firebase Auth State & Sync
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        await syncUserProfile(user, currentMode).catch(console.error);
+      }
+    });
+    return () => unsubscribe();
+  }, [currentMode]);
+
+  // Firestore Realtime Subscriptions (Messages & Memory Insights)
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsubMsgs = subscribeToChatMessages(currentUser.uid, (remoteMsgs) => {
+      if (remoteMsgs && remoteMsgs.length > 0) {
+        setMessages(remoteMsgs);
+      }
+    });
+    const unsubInsights = subscribeToLearnedInsights(currentUser.uid, (remoteInsights) => {
+      if (remoteInsights && remoteInsights.length > 0) {
+        setLearnedInsights(remoteInsights);
+      }
+    });
+    return () => {
+      unsubMsgs();
+      unsubInsights();
+    };
+  }, [currentUser]);
 
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => {
     try {
@@ -294,10 +357,59 @@ export default function App() {
     [voiceSettings]
   );
 
+  // Toggle Sophia Pause / Resume state via Hand Wave Gesture or UI Button
+  const handleTogglePauseResume = useCallback(
+    (source: 'gesture' | 'manual' = 'manual') => {
+      setIsSophiaPaused((prevPaused) => {
+        const nextPaused = !prevPaused;
+        if (nextPaused) {
+          // Action: PAUSE
+          audioService.pauseSpeaking();
+          if (voiceSettings.soundEffects) {
+            audioService.playSoundEffect('pause');
+          }
+          if (isListeningRef.current) {
+            isListeningRef.current = false;
+            setIsListening(false);
+            if (recognitionRef.current) {
+              try {
+                recognitionRef.current.stop();
+              } catch (_) {}
+            }
+          }
+          const noticeMsg =
+            source === 'gesture'
+              ? '👋 Hand wave recognized • Sophia Paused (Wave to resume)'
+              : '⏸️ Sophia Paused (Wave hand or click Resume)';
+          setSttProviderNotice(noticeMsg);
+          setTimeout(() => setSttProviderNotice(null), 3500);
+        } else {
+          // Action: RESUME
+          const wasResumed = audioService.resumeSpeaking();
+          if (!wasResumed && voiceSettings.soundEffects) {
+            audioService.playSoundEffect('resume');
+          }
+          const noticeMsg =
+            source === 'gesture'
+              ? '👋 Hand wave recognized • Sophia Resumed!'
+              : '▶️ Sophia Resumed';
+          setSttProviderNotice(noticeMsg);
+          setTimeout(() => setSttProviderNotice(null), 3000);
+        }
+        return nextPaused;
+      });
+    },
+    [voiceSettings.soundEffects]
+  );
+
   // Send message to Sophia
   const handleSendMessage = useCallback(
     async (userInput: string) => {
       if (!userInput.trim() || isProcessing) return;
+
+      if (isSophiaPaused) {
+        setIsSophiaPaused(false);
+      }
 
       audioService.stopSpeaking();
       if (voiceSettings.soundEffects) {
@@ -313,6 +425,9 @@ export default function App() {
       };
 
       setMessages((prev) => [...prev, userMsg]);
+      if (currentUser) {
+        saveChatMessageToFirestore(currentUser.uid, userMsg).catch(console.error);
+      }
       setIsProcessing(true);
 
       try {
@@ -381,13 +496,20 @@ export default function App() {
         if (data.newLearnedInsight) {
           setSttProviderNotice(`⚡ Sophia learned: "${data.newLearnedInsight.title}"`);
           setTimeout(() => setSttProviderNotice(null), 4000);
+          if (currentUser) {
+            saveLearnedInsightToFirestore(currentUser.uid, data.newLearnedInsight).catch(console.error);
+          }
         }
+
+        const effectiveSpoken = data.spokenText || data.content;
+        const speechSentiment = (data.sentiment as SpeechSentiment) || analyzeSpeechSentiment(effectiveSpoken);
+        setCurrentSentiment(speechSentiment);
 
         const sophiaMsg: ChatMessage = {
           id: `sophia-${Date.now()}`,
           role: 'assistant',
           content: data.content,
-          spokenText: data.spokenText || data.content,
+          spokenText: effectiveSpoken,
           mode: (data.mode as PersonalityMode) || currentMode,
           timestamp: data.timestamp || Date.now(),
           toolCalls: data.toolCalls,
@@ -395,9 +517,13 @@ export default function App() {
           thinkingModel: data.thinkingModel,
           relayActive: data.thinkingRelay,
           voiceProvider: data.voiceEngine,
+          sentiment: speechSentiment,
         };
 
         setMessages((prev) => [...prev, sophiaMsg]);
+        if (currentUser) {
+          saveChatMessageToFirestore(currentUser.uid, sophiaMsg).catch(console.error);
+        }
 
         // Speak aloud
         if (sophiaMsg.spokenText) {
@@ -738,6 +864,13 @@ export default function App() {
         }
         onOpenFastLearner={() => setIsFastLearnerOpen(true)}
         learnedInsightsCount={learnedInsights.length}
+        onOpenStudio={() => setIsStudioOpen(true)}
+        isSophiaPaused={isSophiaPaused}
+        onOpenGestureHUD={() => setIsGestureHUDOpen(true)}
+        isGestureEnabled={isGestureControlEnabled}
+        currentUser={currentUser}
+        onLogin={loginWithGoogle}
+        onLogout={logoutUser}
       />
 
       {/* Main App Canvas */}
@@ -807,21 +940,45 @@ export default function App() {
                   isSpeaking={isSpeaking}
                   isListening={isListening}
                   isProcessing={isProcessing}
+                  isPaused={isSophiaPaused}
+                  currentSentiment={currentSentiment}
                   onOrbClick={() => {
-                    if (isSpeaking) audioService.stopSpeaking();
-                    else handleToggleListening();
+                    if (isSophiaPaused) {
+                      handleTogglePauseResume('manual');
+                    } else if (isSpeaking) {
+                      handleTogglePauseResume('manual');
+                    } else {
+                      handleToggleListening();
+                    }
                   }}
                 />
               </div>
 
               {/* Personality Selector & Controls */}
               <div className="lg:col-span-7 flex flex-col gap-4">
-                <ModeSelector
-                  currentMode={currentMode}
-                  onSelectMode={handleSelectMode}
-                  disabled={isProcessing}
-                  onOpenVoiceMode={() => setIsVoiceModeOpen(true)}
-                />
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className="flex-1">
+                    <ModeSelector
+                      currentMode={currentMode}
+                      onSelectMode={handleSelectMode}
+                      disabled={isProcessing}
+                      onOpenVoiceMode={() => setIsVoiceModeOpen(true)}
+                    />
+                  </div>
+
+                  {/* Futuristic Gesture Sensor Quick Control Bar */}
+                  <div className="shrink-0 flex items-center justify-end">
+                    <WebcamGestureInterface
+                      isSophiaPaused={isSophiaPaused}
+                      onTogglePauseResume={handleTogglePauseResume}
+                      mode={currentMode}
+                      isEnabled={isGestureControlEnabled}
+                      onToggleEnabled={handleUpdateGestureEnabled}
+                      isOpen={isGestureHUDOpen}
+                      onToggleOpen={() => setIsGestureHUDOpen(!isGestureHUDOpen)}
+                    />
+                  </div>
+                </div>
 
                 {/* Voice HUD Command Console */}
                 <VoiceHUD
@@ -842,6 +999,12 @@ export default function App() {
                   onOpenFastLearner={() => setIsFastLearnerOpen(true)}
                   learnedInsightsCount={learnedInsights.length}
                   liveTranscript={liveTranscript}
+                  currentSentiment={currentSentiment}
+                  onSelectSentiment={(s) => setCurrentSentiment(s)}
+                  isSophiaPaused={isSophiaPaused}
+                  onTogglePauseResume={() => handleTogglePauseResume('manual')}
+                  onOpenGestureHUD={() => setIsGestureHUDOpen(true)}
+                  isGestureEnabled={isGestureControlEnabled}
                 />
 
                 {/* Quick Voice Prompts */}
@@ -929,6 +1092,14 @@ export default function App() {
         onDeleteInsight={handleDeleteInsight}
         voiceSettings={voiceSettings}
         onUpdateVoiceSettings={handleUpdateVoiceSettings}
+      />
+
+      {/* Multimodal AI Creative Studio Modal */}
+      <MultimodalStudioModal
+        isOpen={isStudioOpen}
+        onClose={() => setIsStudioOpen(false)}
+        onSendToChat={handleSendMessage}
+        currentUserId={currentUser?.uid}
       />
     </div>
   );
